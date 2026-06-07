@@ -100,8 +100,10 @@ public sealed class AsyncEvaluationJob : BackgroundService
                 // Deserialise existing triggered rules and append async ones.
                 var existingRules = JsonSerializer.Deserialize<List<JsonElement>>(
                     alert.TriggeredRulesJson, JsonOpts) ?? new();
-                var merged = JsonSerializer.Serialize(existingRules.Concat(
-                    asyncTriggered.Select(r => new { r.Code, r.Name, r.Score, Category = r.Category.ToString() })));
+                var asyncElements = asyncTriggered
+                    .Select(r => JsonSerializer.SerializeToElement(
+                        new { r.Code, r.Name, r.Score, Category = r.Category.ToString() }));
+                var merged = JsonSerializer.Serialize(existingRules.Concat(asyncElements));
 
                 // Re-score with all rules (existing sync + new async).
                 var allTriggered = asyncTriggered; // combined scoring uses composite method
@@ -133,9 +135,4 @@ public sealed class AsyncEvaluationJob : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "AsyncEvaluationJob failed for item {Id}", item.Id);
-                await queue.MarkFailedAsync(item.Id, ex.Message, ct);
-            }
-        }
-    }
-}
+                _logger.LogError(ex, "AsyncEvaluationJob failed for item {Id}", i

@@ -25,7 +25,7 @@ public sealed class CaseManagementService : ICaseManagementService
 
     public async Task<FraudCase> AssignAsync(Guid caseId, string analystId, CancellationToken ct = default)
     {
-        var fraudCase = await RequireAsync(caseId, ct);
+        var fraudCase = await GetFraudAsync(caseId, ct);
         fraudCase.AssignedTo = analystId;
         if (fraudCase.Status == CaseStatus.New)
             fraudCase.Status = CaseStatus.UnderInvestigation;
@@ -34,7 +34,7 @@ public sealed class CaseManagementService : ICaseManagementService
 
     public async Task<FraudCase> AddNoteAsync(Guid caseId, string note, string authorId, CancellationToken ct = default)
     {
-        var fraudCase = await RequireAsync(caseId, ct);
+        var fraudCase = await GetFraudAsync(caseId, ct);
         // Append-only per FR-20
         var entry = $"[{DateTimeOffset.UtcNow:O} · {authorId}]: {note}\n";
         fraudCase.Notes += entry;
@@ -43,7 +43,7 @@ public sealed class CaseManagementService : ICaseManagementService
 
     public async Task<FraudCase> EscalateAsync(Guid caseId, string escalatedBy, CancellationToken ct = default)
     {
-        var fraudCase = await RequireAsync(caseId, ct);
+        var fraudCase = await GetFraudAsync(caseId, ct);
         fraudCase.Status          = CaseStatus.Escalated;
         fraudCase.LastEscalatedAt = DateTimeOffset.UtcNow;
         fraudCase.Notes += $"[{DateTimeOffset.UtcNow:O} · {escalatedBy}]: Case escalated.\n";
@@ -56,7 +56,7 @@ public sealed class CaseManagementService : ICaseManagementService
         string resolvedBy,
         CancellationToken ct = default)
     {
-        var fraudCase = await RequireAsync(caseId, ct);
+        var fraudCase = await GetFraudAsync(caseId, ct);
         fraudCase.Status     = CaseStatus.Resolved;
         fraudCase.Resolution = resolution;
         fraudCase.ResolvedAt = DateTimeOffset.UtcNow;
@@ -93,7 +93,7 @@ public sealed class CaseManagementService : ICaseManagementService
         string overriddenBy,
         CancellationToken ct = default)
     {
-        var fraudCase = await RequireAsync(caseId, ct);
+        var fraudCase = await GetFraudAsync(caseId, ct);
         fraudCase.Notes +=
             $"[{DateTimeOffset.UtcNow:O} · {overriddenBy}]: Verdict overridden to {newVerdict}.\n";
         // The actual transaction unblock/reblock is handled by the middleware — the FMS records
@@ -101,10 +101,9 @@ public sealed class CaseManagementService : ICaseManagementService
         return await _cases.SaveAsync(fraudCase, ct);
     }
 
-    private async Task<FraudCase> RequireAsync(Guid caseId, CancellationToken ct)
+    private async Task<FraudCase> GetFraudAsync(Guid caseId, CancellationToken ct)
     {
         var c = await _cases.GetByIdAsync(caseId, ct);
         if (c is null) throw new KeyNotFoundException($"Case {caseId} not found.");
         return c;
-    }
-}
+  

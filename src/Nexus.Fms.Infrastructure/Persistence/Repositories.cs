@@ -71,7 +71,7 @@ public sealed class RuleRepository : IRuleRepository
         rule.ApprovalStatus = RuleApprovalStatus.Rejected;
         rule.RejectedBy = rejectedBy;
         rule.RejectionReason = reason;
-        rule.Mode = RuleMode.Disabled; // ensure rejected rules are not active
+        rule.Mode = RuleMode.Disabled;
         rule.UpdatedAt = DateTimeOffset.UtcNow;
         await _db.SaveChangesAsync(ct);
         return rule;
@@ -109,7 +109,126 @@ public sealed class ListRepository : IListRepository
     }
 
     public Task<ListEntry?> GetByIdAsync(Guid entryId, CancellationToken ct = default) =>
-        _db.ListEntrie
+        _db.ListEntries.AsNoTracking().FirstOrDefaultAsync(e => e.EntryId == entryId, ct);
+
+    public async Task RemoveAsync(Guid entryId, CancellationToken ct = default)
+    {
+        var entry = await _db.ListEntries.FindAsync(new object[] { entryId }, ct);
+        if (entry is not null)
+        {
+            _db.ListEntries.Remove(entry);
+            await _db.SaveChangesAsync(ct);
+        }
+    }
+}
+
+public sealed class AlertStore : IAlertStore
+{
+    private readonly FmsDbContext _db;
+    public AlertStore(FmsDbContext db) => _db = db;
+
+    public async Task<FraudAlert> SaveAlertAsync(FraudAlert alert, CancellationToken ct = default)
+    {
+        _db.Alerts.Add(alert);
+        await _db.SaveChangesAsync(ct);
+        return alert;
+    }
+
+    public async Task<FraudCase> CreateCaseAsync(FraudCase fraudCase, CancellationToken ct = default)
+    {
+        _db.Cases.Add(fraudCase);
+        await _db.SaveChangesAsync(ct);
+        return fraudCase;
+    }
+
+    public Task<FraudAlert?> GetAlertByIdAsync(Guid alertId, CancellationToken ct = default) =>
+        _db.Alerts.FirstOrDefaultAsync(a => a.AlertId == alertId, ct);
+
+    public async Task UpdateAlertAsync(FraudAlert alert, CancellationToken ct = default)
+    {
+        if (_db.Entry(alert).State == EntityState.Detached)
+            _db.Alerts.Update(alert);
+        await _db.SaveChangesAsync(ct);
+    }
+}
+
+public sealed class CaseRepository : ICaseRepository
+{
+    private readonly FmsDbContext _db;
+    public CaseRepository(FmsDbContext db) => _db = db;
+
+    public Task<FraudCase?> GetByIdAsync(Guid caseId, CancellationToken ct = default) =>
+        _db.Cases.FirstOrDefaultAsync(c => c.CaseId == caseId, ct);
+
+    public Task<FraudAlert?> GetAlertByIdAsync(Guid alertId, CancellationToken ct = default) =>
+        _db.Alerts.AsNoTracking().FirstOrDefaultAsync(a => a.AlertId == alertId, ct);
+
+    public async Task<IReadOnlyList<FraudCase>> ListAsync(
+        CaseStatus? status, string? assignedTo, int skip, int take, CancellationToken ct = default)
+    {
+        var q = _db.Cases.AsNoTracking().AsQueryable();
+        if (status.HasValue)    q = q.Where(c => c.Status == status.Value);
+        if (assignedTo != null) q = q.Where(c => c.AssignedTo == assignedTo);
+        return await q.OrderByDescending(c => c.CreatedAt).Skip(skip).Take(take).ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<FraudCase>> GetStaleAsync(DateTimeOffset olderThan, CancellationToken ct = default) =>
+        await _db.Cases
+            .Where(c => (c.Status == CaseStatus.New || c.Status == CaseStatus.UnderInvestigation)
+                        && c.CreatedAt < olderThan
+                        && (c.LastEscalatedAt == null || c.LastEscalatedAt < olderThan))
+            .ToListAsync(ct);
+
+    public async Task<FraudCase> SaveAsync(FraudCase fraudCase, CancellationToken ct = default)
+    {
+        if (_db.Entry(fraudCase).State == EntityState.Detached)
+            _db.Cases.Update(fraudCase);
+        await _db.SaveChangesAsync(ct);
+        return fraudCase;
+    }
+}
+
+public sealed class AsyncEvaluationQueue : IAsyncEvaluationQueue
+{
+    private readonly FmsDbContext _db;
+    public AsyncEvaluationQueue(FmsDbContext db) => _db = db;
+
+    public async Task EnqueueAsync(Guid alertId, TransactionContext context, CancellationToken ct = default)
+    {
+        _db.AsyncEvaluations.Add(new PendingAsyncEvaluation
+        {
+            AlertId = alertId,
+            TransactionContextJson = JsonSerializer.Serialize(context)
+        });
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<PendingAsyncEvaluation>> DequeueAsync(int batchSize = 20, CancellationToken ct = default) =>
+        await _db.AsyncEvaluations
+            .Where(e => e.Status == AsyncEvalStatus.Pending)
+            .OrderBy(e => e.CreatedAt)
+            .Take(batchSize)
+            .ToListAsync(ct);
+
+    public async Task MarkCompletedAsync(Guid id, CancellationToken ct = default)
+    {
+        var e = await _db.AsyncEvaluations.FindAsync(new object[] { id }, ct);
+        if (e is null) return;
+        e.Status = AsyncEvalStatus.Completed;
+        e.ProcessedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task MarkFailedAsync(Guid id, string error, CancellationToken ct = default)
+    {
+        var e = await _db.AsyncEvaluations.FindAsync(new object[] { id }, ct);
+        if (e is null) return;
+        e.Status = AsyncEvalStatus.Failed;
+        e.Error = error;
+        e.ProcessedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(ct);
+    }
+}
 
 public sealed class AuditLogRepository : IAuditLogger
 {
@@ -126,8 +245,8 @@ public sealed class AuditLogRepository : IAuditLogger
             EntityType  = entityType,
             EntityId    = entityId,
             PerformedBy = performedBy,
-            OldValues   = oldValues is null ? null : System.Text.Json.JsonSerializer.Serialize(oldValues),
-            NewValues   = newValues is null ? null : System.Text.Json.JsonSerializer.Serialize(newValues)
+            OldValues   = oldValues is null ? null : JsonSerializer.Serialize(oldValues),
+            NewValues   = newValues is null ? null : JsonSerializer.Serialize(newValues)
         });
         await _db.SaveChangesAsync(ct);
     }
@@ -136,8 +255,8 @@ public sealed class AuditLogRepository : IAuditLogger
         string? entityType, Guid? entityId, int skip, int take, CancellationToken ct = default)
     {
         var q = _db.AuditLogs.AsNoTracking().AsQueryable();
-        if (entityType != null) q = q.Where(e => e.EntityType == entityType);
-        if (entityId.HasValue) q = q.Where(e => e.EntityId == entityId.Value);
+        if (entityType != null)  q = q.Where(e => e.EntityType == entityType);
+        if (entityId.HasValue)   q = q.Where(e => e.EntityId == entityId.Value);
         return await q.OrderByDescending(e => e.Timestamp).Skip(skip).Take(take).ToListAsync(ct);
     }
 }
