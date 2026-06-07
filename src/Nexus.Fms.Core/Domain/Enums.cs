@@ -109,3 +109,11 @@ public enum FailureMode
     FailOpen,   // allow the transaction, log the bypass (default)
     FailClosed  // block the transaction
 }
+
+/// <summary>Maker-checker approval state for rule changes (FR-25, FR-26).</summary>
+public enum RuleApprovalStatus
+{
+    PendingApproval,
+    Approved,
+    Rejected
+}

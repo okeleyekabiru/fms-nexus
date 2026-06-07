@@ -37,6 +37,12 @@ public class FraudRule
     /// </summary>
     public bool CannotBeOffset { get; set; }
 
+
+    // Approval workflow (FR-25)
+    public RuleApprovalStatus ApprovalStatus { get; set; } = RuleApprovalStatus.PendingApproval;
+    public string? RejectedBy { get; set; }
+    public string? RejectionReason { get; set; }
+
     // Maker-checker audit (FR-25, FR-26)
     public string? CreatedBy { get; set; }
     public string? ApprovedBy { get; set; }

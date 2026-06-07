@@ -3,7 +3,7 @@ using Nexus.Fms.Core.Domain;
 
 namespace Nexus.Fms.Infrastructure.Persistence;
 
-/// <summary>EF Core context for the FMS data model (§6). Targets PostgreSQL (JSONB columns).</summary>
+/// <summary>EF Core context for the FMS data model (section 6). Targets PostgreSQL (JSONB columns).</summary>
 public class FmsDbContext : DbContext
 {
     public FmsDbContext(DbContextOptions<FmsDbContext> options) : base(options) { }
@@ -13,6 +13,7 @@ public class FmsDbContext : DbContext
     public DbSet<FraudCase> Cases => Set<FraudCase>();
     public DbSet<ListEntry> ListEntries => Set<ListEntry>();
     public DbSet<PendingAsyncEvaluation> AsyncEvaluations => Set<PendingAsyncEvaluation>();
+    public DbSet<AuditLogEntry> AuditLogs => Set<AuditLogEntry>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -26,6 +27,7 @@ public class FmsDbContext : DbContext
             e.Property(x => x.ConditionsJson).HasColumnType("jsonb");
             e.Property(x => x.Category).HasConversion<string>();
             e.Property(x => x.Mode).HasConversion<string>();
+            e.Property(x => x.ApprovalStatus).HasConversion<string>();
         });
 
         b.Entity<FraudAlert>(e =>
@@ -55,5 +57,4 @@ public class FmsDbContext : DbContext
             e.ToTable("fraud_list_entries");
             e.HasKey(x => x.EntryId);
             e.HasIndex(x => x.Bvn);
-            e.HasIndex(x => x.AccountNumber);
-            e.Property(x => x.ListType).HasConversion<string
+            e.HasInd

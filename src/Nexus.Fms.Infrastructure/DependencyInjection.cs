@@ -27,6 +27,7 @@ public static class DependencyInjection
         services.AddScoped<IAlertStore, AlertStore>();
         services.AddScoped<ICaseRepository, CaseRepository>();
         services.AddScoped<IAsyncEvaluationQueue, AsyncEvaluationQueue>();
+        services.AddScoped<IAuditLogger, AuditLogRepository>();
 
         // Core services
         services.AddScoped<ICaseManagementService, CaseManagementService>();
