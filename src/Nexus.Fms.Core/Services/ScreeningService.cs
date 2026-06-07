@@ -140,6 +140,9 @@ public sealed class ScreeningService : IScreeningService
                 RiskLevel = result.RiskLevel,
                 Verdict = result.Verdict,
                 ShadowOnly = shadowOnly,
+                SenderAccount = context.SenderAccount,
+                SenderBvn = context.SenderBvn,
+                Amount = context.Amount,
                 TriggeredRulesJson = JsonSerializer.Serialize(
                     result.EffectiveRules.Select(r => new { r.Code, r.Name, r.Score, Category = r.Category.ToString() })),
                 NibssLookupResultJson = needsNibss
@@ -164,7 +167,4 @@ public sealed class ScreeningService : IScreeningService
         {
             TransactionRef = context.TransactionRef,
             Verdict = result.Verdict,
-            RiskScore = result.CompositeScore,
-            RiskLevel = result.RiskLevel,
-            TriggeredRules = result.EffectiveRules
-                .Selec
+            RiskSco

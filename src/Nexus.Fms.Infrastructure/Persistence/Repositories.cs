@@ -36,18 +36,14 @@ public sealed class ListRepository : IListRepository
         _db.ListEntries.Add(entry);
         await _db.SaveChangesAsync(ct);
     }
-}
 
-public sealed class CaseRepository : ICaseRepository
-{
-    private readonly FmsDbContext _db;
-    public CaseRepository(FmsDbContext db) => _db = db;
+    public async Task<IReadOnlyList<ListEntry>> GetEntriesAsync(
+        ListType? listType, int skip, int take, CancellationToken ct = default)
+    {
+        var q = _db.ListEntries.AsNoTracking().AsQueryable();
+        if (listType.HasValue) q = q.Where(e => e.ListType == listType.Value);
+        return await q.OrderByDescending(e => e.CreatedAt).Skip(skip).Take(take).ToListAsync(ct);
+    }
 
-    public Task<FraudCase?> GetByIdAsync(Guid caseId, CancellationToken ct = default) =>
-        _db.Cases.FirstOrDefaultAsync(c => c.CaseId == caseId, ct);
-
-    public Task<FraudAlert?> GetAlertByIdAsync(Guid alertId, CancellationToken ct = default) =>
-        _db.Alerts.AsNoTracking().FirstOrDefaultAsync(a => a.AlertId == alertId, ct);
-
-    public async Task<IReadOnlyList<FraudCase>> ListAsync(
-        CaseStat
+    public Task<ListEntry?> GetByIdAsync(Guid entryId, CancellationToken ct = default) =>
+        _db.ListEntries.AsNoTracking().FirstOrDefaultAsync(e => e.EntryId == entryId, 

@@ -29,7 +29,7 @@ public static class DependencyInjection
 
         // ── Core services ──────────────────────────────────────────────────────
         services.AddScoped<ICaseManagementService, CaseManagementService>();
-        services.AddScoped<ICaseSideEffectsHandler, StubCaseSideEffectsHandler>();
+        services.AddScoped<ICaseSideEffectsHandler, CaseSideEffectsHandler>();
 
         // ── NIBSS integration (Dependencies §7a) ───────────────────────────────
         var nibssBaseUrl = config["Nibss:BaseUrl"];
@@ -44,4 +44,4 @@ public static class DependencyInjection
                 {
                     c.BaseAddress = new Uri(nibssBaseUrl);
                     c.Timeout     = TimeSpan.FromSeconds(timeoutSeconds); // NFR-08
-                    var apiKey = confi
+                    var apiKey = config["N
