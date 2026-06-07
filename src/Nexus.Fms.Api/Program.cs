@@ -1,5 +1,10 @@
+using System.Text;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
+using Nexus.Fms.Api.Security;
 using Nexus.Fms.Core.Abstractions;
 using Nexus.Fms.Core.Domain;
 using Nexus.Fms.Core.Engine;
@@ -10,43 +15,36 @@ using Nexus.Fms.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ── JSON / Controllers ─────────────────────────────────────────────────────────
 builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
+// ── Swagger with JWT support ───────────────────────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-
-// Configurable engines (FR-11/FR-12 threshold bands, FR-04/FR-16 screening options).
-builder.Services.Configure<ThresholdBands>(builder.Configuration.GetSection("ThresholdBands"));
-builder.Services.Configure<ScreeningOptions>(builder.Configuration.GetSection("Screening"));
-
-builder.Services.AddSingleton<RuleEngine>();
-builder.Services.AddScoped<ScoringEngine>();
-builder.Services.AddScoped<IScreeningService, ScreeningService>();
-
-builder.Services.AddFmsInfrastructure(builder.Configuration);
-
-var app = builder.Build();
-
-if (app.Environment.IsDevelopment())
+builder.Services.AddSwaggerGen(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Nexus FMS API", Version = "v1" });
 
-    // Create the schema and seed the initial rule set in Development (§5).
-    // NOTE: for staging/production, replace EnsureCreated with EF Core migrations
-    // (dotnet ef migrations add Initial) so schema changes are versioned and auditable (FR-26).
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<FmsDbContext>();
-    await db.Database.EnsureCreatedAsync();
-    // Seed mode is configurable (Seeding:Mode). Spec default is Shadow (tune before go-live);
-    // docker-compose sets it to Live so the screening pipeline enforces verdicts out-of-the-box.
-    var seedMode = builder.Configuration.GetValue("Seeding:Mode", RuleMode.Shadow);
-    await RuleSeeder.SeedAsync(db, seedMode);
-    await ListSeeder.SeedAsync(db);
-}
+    // Allow JWT bearer tokens to be entered in Swagger UI
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "JWT Bearer token. Enter: Bearer {token}",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
 
-app.UseHttpsRedirection();
-app.MapControllers();
-
-app.Run();
+// ── Authentication — JWT bearer (M6-1) ────────────────────────────────────────
+var jwtKey = builder.Configuration["Jwt:Key"
