@@ -106,4 +106,5 @@ public sealed class CaseManagementService : ICaseManagementService
         var c = await _cases.GetByIdAsync(caseId, ct);
         if (c is null) throw new KeyNotFoundException($"Case {caseId} not found.");
         return c;
-  
+    }
+}

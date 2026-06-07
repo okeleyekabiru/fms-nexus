@@ -135,4 +135,9 @@ public sealed class AsyncEvaluationJob : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "AsyncEvaluationJob failed for item {Id}", i
+                _logger.LogError(ex, "AsyncEvaluationJob failed for item {Id}", item.Id);
+                await queue.MarkFailedAsync(item.Id, ex.Message, ct);
+            }
+        }
+    }
+}

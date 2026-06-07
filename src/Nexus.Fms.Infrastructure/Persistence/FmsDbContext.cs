@@ -57,4 +57,30 @@ public class FmsDbContext : DbContext
             e.ToTable("fraud_list_entries");
             e.HasKey(x => x.EntryId);
             e.HasIndex(x => x.Bvn);
-            e.HasInd
+            e.HasIndex(x => x.AccountNumber);
+            e.Property(x => x.ListType).HasConversion<string>();
+            e.Property(x => x.Source).HasConversion<string>();
+        });
+
+        b.Entity<PendingAsyncEvaluation>(e =>
+        {
+            e.ToTable("fraud_async_evaluations");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.Status);
+            e.HasIndex(x => x.AlertId);
+            e.Property(x => x.Status).HasConversion<string>();
+            e.Property(x => x.TransactionContextJson).HasColumnType("jsonb");
+        });
+
+        b.Entity<AuditLogEntry>(e =>
+        {
+            e.ToTable("fraud_audit_logs");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.EntityType);
+            e.HasIndex(x => x.EntityId);
+            e.HasIndex(x => x.Timestamp);
+            e.Property(x => x.OldValues).HasColumnType("jsonb");
+            e.Property(x => x.NewValues).HasColumnType("jsonb");
+        });
+    }
+}

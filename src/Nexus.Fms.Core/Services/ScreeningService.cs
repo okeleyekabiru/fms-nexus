@@ -165,4 +165,30 @@ public sealed class ScreeningService : IScreeningService
             // FR-03: enqueue async evaluation if any active async rules exist.
             if (hasAsyncRules)
             {
-                try { await
+                try { await _asyncQueue.EnqueueAsync(alert.AlertId, context, ct); }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to enqueue async evaluation for {Ref}", context.TransactionRef);
+                }
+            }
+        }
+
+        sw.Stop();
+        if (sw.ElapsedMilliseconds > 50)
+            _logger.LogWarning("Screening for {Ref} took {Ms}ms (NFR-01 budget 50ms)", context.TransactionRef, sw.ElapsedMilliseconds);
+
+        return new ScreeningResponse
+        {
+            TransactionRef = context.TransactionRef,
+            Verdict = result.Verdict,
+            RiskScore = result.CompositeScore,
+            RiskLevel = result.RiskLevel,
+            TriggeredRules = result.EffectiveRules
+                .Select(r => new TriggeredRuleDto(r.Code, r.Name, r.Score, r.Category.ToString()))
+                .ToList(),
+            AlertId = alertId,
+            CaseId = caseId,
+            EvaluationMs = sw.ElapsedMilliseconds
+        };
+    }
+}

@@ -22,4 +22,10 @@ public class FraudAlert
     /// <summary>True when verdict came from a shadow-mode evaluation (action not enforced).</summary>
     public bool ShadowOnly { get; set; }
 
-    // ── Transaction party fields (needed for SAR submission — FR-17) �
+    // ── Transaction party fields (needed for SAR submission — FR-17) ───────────
+    public string SenderAccount { get; set; } = string.Empty;
+    public string? SenderBvn { get; set; }
+    public decimal Amount { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
