@@ -129,6 +129,9 @@ public sealed class ScreeningService : IScreeningService
         Guid? caseId = null;
         if (result.CompositeScore > 0)
         {
+            // M1-1 bug fix: mark alert as shadow-only when no live rules fired (FR-07, Workflow 4)
+            var shadowOnly = result.EffectiveRules.Count == 0 && result.ShadowRules.Count > 0;
+
             var alert = await _alerts.SaveAlertAsync(new FraudAlert
             {
                 TransactionRef = context.TransactionRef,
@@ -136,6 +139,7 @@ public sealed class ScreeningService : IScreeningService
                 CompositeRiskScore = result.CompositeScore,
                 RiskLevel = result.RiskLevel,
                 Verdict = result.Verdict,
+                ShadowOnly = shadowOnly,
                 TriggeredRulesJson = JsonSerializer.Serialize(
                     result.EffectiveRules.Select(r => new { r.Code, r.Name, r.Score, Category = r.Category.ToString() })),
                 NibssLookupResultJson = needsNibss
@@ -163,11 +167,4 @@ public sealed class ScreeningService : IScreeningService
             RiskScore = result.CompositeScore,
             RiskLevel = result.RiskLevel,
             TriggeredRules = result.EffectiveRules
-                .Select(r => new TriggeredRuleDto(r.Code, r.Name, r.Score, r.Category.ToString()))
-                .ToList(),
-            AlertId = alertId,
-            CaseId = caseId,
-            EvaluationMs = sw.ElapsedMilliseconds
-        };
-    }
-}
+                .Selec

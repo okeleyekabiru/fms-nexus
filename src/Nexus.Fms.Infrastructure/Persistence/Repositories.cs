@@ -38,22 +38,16 @@ public sealed class ListRepository : IListRepository
     }
 }
 
-public sealed class AlertStore : IAlertStore
+public sealed class CaseRepository : ICaseRepository
 {
     private readonly FmsDbContext _db;
-    public AlertStore(FmsDbContext db) => _db = db;
+    public CaseRepository(FmsDbContext db) => _db = db;
 
-    public async Task<FraudAlert> SaveAlertAsync(FraudAlert alert, CancellationToken ct = default)
-    {
-        _db.Alerts.Add(alert);
-        await _db.SaveChangesAsync(ct);
-        return alert;
-    }
+    public Task<FraudCase?> GetByIdAsync(Guid caseId, CancellationToken ct = default) =>
+        _db.Cases.FirstOrDefaultAsync(c => c.CaseId == caseId, ct);
 
-    public async Task<FraudCase> CreateCaseAsync(FraudCase fraudCase, CancellationToken ct = default)
-    {
-        _db.Cases.Add(fraudCase);
-        await _db.SaveChangesAsync(ct);
-        return fraudCase;
-    }
-}
+    public Task<FraudAlert?> GetAlertByIdAsync(Guid alertId, CancellationToken ct = default) =>
+        _db.Alerts.AsNoTracking().FirstOrDefaultAsync(a => a.AlertId == alertId, ct);
+
+    public async Task<IReadOnlyList<FraudCase>> ListAsync(
+        CaseStat
