@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Nexus.Fms.Core.Abstractions;
 using Nexus.Fms.Core.Domain;
+using Microsoft.Extensions.Options;
 
 namespace Nexus.Fms.Infrastructure.Jobs;
 
@@ -63,12 +64,13 @@ public sealed class CaseEscalationJob : BackgroundService
         var critical = await repo.ListAsync(
             CaseStatus.Escalated, assignedTo: null, skip: 0, take: 200, ct);
 
+        var notifier = scope.ServiceProvider.GetRequiredService<IFraudNotificationService>();
         foreach (var c in critical.Where(c => c.CreatedAt < headOpsThreshold))
         {
-            _logger.LogCritical(
-                "HeadOfOpsAlert: Case {CaseId} has been unresolved for >{Hours}h. " +
-                "Immediate attention required.",
-                c.CaseId, HeadOfOpsAfter.TotalHours);
+            await notifier.NotifyHeadOfOpsAsync(
+                c,
+                $"Case unresolved for more than {HeadOfOpsAfter.TotalHours}h",
+                ct);
         }
     }
 }
