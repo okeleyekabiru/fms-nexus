@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: nexus-fms-db
+    environment:
+      POSTGRES_DB: nexus_fms
+      POSTGRES_USER: fms
+      POSTGRES_PASSWORD: changeme
+    ports:
+      - "5432:5432"
+    volumes:
+      - fms-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fms -d nexus_fms"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nexus-fms-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Development => Swagger UI + EnsureCreated schema + 15-rule seed (see Program.cs)
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Fms: "Host=db;Port=5432;Database=nexus_fms;Username=fms;Password=changeme"
+      # Seed the 15 rules in LIVE mode so verdicts are enforced for easy testing.
+      # Set to "Shadow" to mirror the spec's pre-go-live default (rules evaluate but don't act).
+      Seeding__Mode: "Live"
+      # Leave NIBSS base URL empty to use the offline stub client (Dependencies §7a)
+      Nibss__BaseUrl: ""
+    ports:
+      - "8080:8080"
+
+volumes:
+  fms-pgdata:

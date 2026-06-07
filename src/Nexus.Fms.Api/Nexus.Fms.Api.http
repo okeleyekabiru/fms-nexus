@@ -1,0 +1,109 @@
+@host = http://localhost:8080
+
+### Health check (NFR-03 liveness)
+GET {{host}}/health
+
+### P1 / Block — R04 (+40) first-time benef >N500K + R05 (+30) new device + R03 (+50) watchlisted receiver = 120
+POST {{host}}/api/screening/evaluate
+Content-Type: application/json
+
+{
+  "transactionRef": "TX-P1",
+  "customerId": "11111111-1111-1111-1111-111111111111",
+  "type": "InterBankTransferNip",
+  "direction": "Outflow",
+  "channel": "Adspire",
+  "amount": 750000,
+  "senderAccount": "0011223344",
+  "receiverAccount": "0099887766",
+  "receiverBvn": "22222222222",
+  "isNewDevice": true,
+  "minutesSinceFirstLogin": 5,
+  "isFirstTimeBeneficiary": true
+}
+
+### P2 / RequireMfa — R04 (+40) + R05 (+30) = 70, clean receiver
+POST {{host}}/api/screening/evaluate
+Content-Type: application/json
+
+{
+  "transactionRef": "TX-P2",
+  "customerId": "11111111-1111-1111-1111-111111111111",
+  "type": "IntraBankTransfer",
+  "direction": "Outflow",
+  "channel": "Adspire",
+  "amount": 750000,
+  "senderAccount": "0011223344",
+  "receiverAccount": "0055667788",
+  "isNewDevice": true,
+  "minutesSinceFirstLogin": 5,
+  "isFirstTimeBeneficiary": true
+}
+
+### P3 / Flag — R04 (+40) first-time beneficiary >N500K only
+POST {{host}}/api/screening/evaluate
+Content-Type: application/json
+
+{
+  "transactionRef": "TX-P3",
+  "customerId": "11111111-1111-1111-1111-111111111111",
+  "type": "IntraBankTransfer",
+  "direction": "Outflow",
+  "channel": "Adspire",
+  "amount": 600000,
+  "senderAccount": "0011223344",
+  "receiverAccount": "0055667788",
+  "isFirstTimeBeneficiary": true
+}
+
+### Clean / Allow — R14 (-5) recurring beneficiary, floored to 0
+POST {{host}}/api/screening/evaluate
+Content-Type: application/json
+
+{
+  "transactionRef": "TX-CLEAN",
+  "customerId": "11111111-1111-1111-1111-111111111111",
+  "type": "IntraBankTransfer",
+  "direction": "Outflow",
+  "channel": "Adspire",
+  "amount": 25000,
+  "senderAccount": "0011223344",
+  "receiverAccount": "0055667788",
+  "successfulTransfersToBeneficiary": 5
+}
+
+### P1 / Block via velocity + balance — R02 (+50) >5 transfers/10min + R08 (+35) >80% of balance = 85
+POST {{host}}/api/screening/evaluate
+Content-Type: application/json
+
+{
+  "transactionRef": "TX-VELOCITY",
+  "customerId": "11111111-1111-1111-1111-111111111111",
+  "type": "IntraBankTransfer",
+  "direction": "Outflow",
+  "channel": "Adspire",
+  "amount": 90000,
+  "senderAccount": "0011223344",
+  "receiverAccount": "0055667788",
+  "history": {
+    "outboundTransfersLast10Min": 6,
+    "cumulativeOutflowToday": 90000,
+    "openingBalanceToday": 100000
+  }
+}
+
+### P1 / Block — internal blacklist sender (R09 +100, cannot be offset)
+POST {{host}}/api/screening/evaluate
+Content-Type: application/json
+
+{
+  "transactionRef": "TX-BLACKLIST",
+  "customerId": "11111111-1111-1111-1111-111111111111",
+  "type": "IntraBankTransfer",
+  "direction": "Outflow",
+  "channel": "Adspire",
+  "amount": 10000,
+  "senderAccount": "0011223344",
+  "senderBvn": "BLACKLISTED-BVN",
+  "receiverAccount": "0055667788"
+}
