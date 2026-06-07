@@ -10,6 +10,7 @@ using Nexus.Fms.Infrastructure.Fraud;
 using Nexus.Fms.Infrastructure.Jobs;
 using Nexus.Fms.Infrastructure.Nibss;
 using Nexus.Fms.Infrastructure.Persistence;
+using Nexus.Fms.Infrastructure.Reporting;
 
 namespace Nexus.Fms.Infrastructure;
 
@@ -28,6 +29,7 @@ public static class DependencyInjection
         services.AddScoped<ICaseRepository, CaseRepository>();
         services.AddScoped<IAsyncEvaluationQueue, AsyncEvaluationQueue>();
         services.AddScoped<IAuditLogger, AuditLogRepository>();
+        services.AddScoped<IReportingService, ReportingService>();
 
         // Core services
         services.AddScoped<ICaseManagementService, CaseManagementService>();
