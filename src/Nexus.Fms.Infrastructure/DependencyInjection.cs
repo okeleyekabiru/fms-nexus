@@ -17,21 +17,22 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddFmsInfrastructure(this IServiceCollection services, IConfiguration config)
     {
-        // ── Database ───────────────────────────────────────────────────────────
+        // Database
         services.AddDbContext<FmsDbContext>(opt =>
             opt.UseNpgsql(config.GetConnectionString("Fms")));
 
-        // ── Repositories ───────────────────────────────────────────────────────
+        // Repositories
         services.AddScoped<IRuleRepository, RuleRepository>();
         services.AddScoped<IListRepository, ListRepository>();
         services.AddScoped<IAlertStore, AlertStore>();
         services.AddScoped<ICaseRepository, CaseRepository>();
+        services.AddScoped<IAsyncEvaluationQueue, AsyncEvaluationQueue>();
 
-        // ── Core services ──────────────────────────────────────────────────────
+        // Core services
         services.AddScoped<ICaseManagementService, CaseManagementService>();
         services.AddScoped<ICaseSideEffectsHandler, CaseSideEffectsHandler>();
 
-        // ── NIBSS integration (Dependencies §7a) ───────────────────────────────
+        // NIBSS integration (Dependencies 7a)
         var nibssBaseUrl = config["Nibss:BaseUrl"];
         if (string.IsNullOrWhiteSpace(nibssBaseUrl))
         {
@@ -44,4 +45,20 @@ public static class DependencyInjection
                 {
                     c.BaseAddress = new Uri(nibssBaseUrl);
                     c.Timeout     = TimeSpan.FromSeconds(timeoutSeconds); // NFR-08
-                    var apiKey = config["N
+                    var apiKey = config["Nibss:ApiKey"];
+                    if (!string.IsNullOrWhiteSpace(apiKey))
+                        c.DefaultRequestHeaders.Authorization =
+                            new AuthenticationHeaderValue("Bearer", apiKey);
+                })
+                .AddPolicyHandler(RetryPolicy())
+                .AddPolicyHandler(CircuitBreakerPolicy());
+        }
+
+        // Background jobs
+        services.AddHostedService<CaseEscalationJob>();
+        services.AddHostedService<AsyncEvaluationJob>();
+
+        return services;
+    }
+
+    // 3 retries with exponen

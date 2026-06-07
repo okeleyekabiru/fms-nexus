@@ -32,6 +32,7 @@ public sealed class ScreeningService : IScreeningService
     private readonly IListRepository _lists;
     private readonly INibssFraudBureauClient _nibss;
     private readonly IAlertStore _alerts;
+    private readonly IAsyncEvaluationQueue _asyncQueue;
     private readonly RuleEngine _engine;
     private readonly ScoringEngine _scoring;
     private readonly ScreeningOptions _options;
@@ -42,6 +43,7 @@ public sealed class ScreeningService : IScreeningService
         IListRepository lists,
         INibssFraudBureauClient nibss,
         IAlertStore alerts,
+        IAsyncEvaluationQueue asyncQueue,
         RuleEngine engine,
         ScoringEngine scoring,
         IOptions<ScreeningOptions> options,
@@ -51,6 +53,7 @@ public sealed class ScreeningService : IScreeningService
         _lists = lists;
         _nibss = nibss;
         _alerts = alerts;
+        _asyncQueue = asyncQueue;
         _engine = engine;
         _scoring = scoring;
         _options = options.Value;
@@ -119,6 +122,7 @@ public sealed class ScreeningService : IScreeningService
         // 2. Build facts and evaluate synchronous rules.
         var facts = FactBuilder.Build(context, lookups);
         var activeRules = await _rules.GetActiveRulesAsync(ct);
+        var hasAsyncRules = activeRules.Any(r => r.IsActive && !r.IsSynchronous);
         var triggered = _engine.Evaluate(activeRules, facts, synchronousOnly: true);
 
         // 3. Score and map to a verdict.
@@ -157,14 +161,8 @@ public sealed class ScreeningService : IScreeningService
                 var fraudCase = await _alerts.CreateCaseAsync(new FraudCase { AlertId = alert.AlertId }, ct);
                 caseId = fraudCase.CaseId;
             }
-        }
 
-        sw.Stop();
-        if (sw.ElapsedMilliseconds > 50)
-            _logger.LogWarning("Screening for {Ref} took {Ms}ms (NFR-01 budget 50ms)", context.TransactionRef, sw.ElapsedMilliseconds);
-
-        return new ScreeningResponse
-        {
-            TransactionRef = context.TransactionRef,
-            Verdict = result.Verdict,
-            RiskSco
+            // FR-03: enqueue async evaluation if any active async rules exist.
+            if (hasAsyncRules)
+            {
+                try { await

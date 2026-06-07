@@ -7,4 +7,5 @@ public interface IAlertStore
 {
     Task<FraudAlert> SaveAlertAsync(FraudAlert alert, CancellationToken ct = default);
     Task<FraudCase> CreateCaseAsync(FraudCase fraudCase, CancellationToken ct = default);
-}
+
+ 

@@ -12,6 +12,7 @@ public class FmsDbContext : DbContext
     public DbSet<FraudAlert> Alerts => Set<FraudAlert>();
     public DbSet<FraudCase> Cases => Set<FraudCase>();
     public DbSet<ListEntry> ListEntries => Set<ListEntry>();
+    public DbSet<PendingAsyncEvaluation> AsyncEvaluations => Set<PendingAsyncEvaluation>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -55,8 +56,4 @@ public class FmsDbContext : DbContext
             e.HasKey(x => x.EntryId);
             e.HasIndex(x => x.Bvn);
             e.HasIndex(x => x.AccountNumber);
-            e.Property(x => x.ListType).HasConversion<string>();
-            e.Property(x => x.Source).HasConversion<string>();
-        });
-    }
-}
+            e.Property(x => x.ListType).HasConversion<string

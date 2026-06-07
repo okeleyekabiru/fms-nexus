@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using Nexus.Fms.Core.Abstractions;
 using Nexus.Fms.Core.Domain;
+using EntityState = Microsoft.EntityFrameworkCore.EntityState;
 
 namespace Nexus.Fms.Infrastructure.Persistence;
 
@@ -46,4 +48,4 @@ public sealed class ListRepository : IListRepository
     }
 
     public Task<ListEntry?> GetByIdAsync(Guid entryId, CancellationToken ct = default) =>
-        _db.ListEntries.AsNoTracking().FirstOrDefaultAsync(e => e.EntryId == entryId, 
+        _db.ListEntrie
