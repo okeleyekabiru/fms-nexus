@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using Microsoft.Extensions.Logging;
 using Nexus.Fms.Core.Abstractions;
+using Nexus.Fms.Core.Dto;
 
 namespace Nexus.Fms.Infrastructure.Nibss;
 

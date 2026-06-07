@@ -32,7 +32,7 @@ public static class DependencyInjection
             services.AddHttpClient<INibssFraudBureauClient, NibssFraudBureauClient>(c =>
                 {
                     c.BaseAddress = new Uri(nibssBaseUrl);
-                    c.Timeout = TimeSpan.FromSeconds(5); // NFR-08: 5s timeout
+                    c.Timeout = TimeSpan.FromSeconds(Convert.ToUInt64(config["Nibss:TimeoutSeconds"])); // NFR-08: 5s timeout
                     var apiKey = config["Nibss:ApiKey"];
                     if (!string.IsNullOrWhiteSpace(apiKey))
                         c.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);

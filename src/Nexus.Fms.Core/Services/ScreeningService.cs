@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nexus.Fms.Core.Abstractions;
 using Nexus.Fms.Core.Domain;
+using Nexus.Fms.Core.Dto;
 using Nexus.Fms.Core.Engine;
 using Nexus.Fms.Core.Scoring;
 

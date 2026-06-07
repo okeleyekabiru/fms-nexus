@@ -21,12 +21,12 @@ public static class FactBuilder
 {
     public static Dictionary<string, object?> Build(TransactionContext ctx, ListLookupResult lookups)
     {
-        var h = ctx.History;
-        var outflowPercent = h.OpeningBalanceToday > 0
-            ? (double)(h.CumulativeOutflowToday / h.OpeningBalanceToday) * 100d
+        var history = ctx.History;
+        var outflowPercent = history.OpeningBalanceToday > 0
+            ? (double)(history.CumulativeOutflowToday / history.OpeningBalanceToday) * 100d
             : 0d;
-        var amountToP95Ratio = h.Percentile95Amount90Day > 0
-            ? (double)(ctx.Amount / h.Percentile95Amount90Day)
+        var amountToP95Ratio = history.Percentile95Amount90Day > 0
+            ? (double)(ctx.Amount / history.Percentile95Amount90Day)
             : 0d;
 
         return new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
@@ -37,14 +37,14 @@ public static class FactBuilder
             [FactKeys.Channel] = ctx.Channel.ToString(),
             [FactKeys.HourOfDay] = ctx.Timestamp.LocalDateTime.Hour,
 
-            [FactKeys.Percentile95Amount] = h.Percentile95Amount90Day,
+            [FactKeys.Percentile95Amount] = history.Percentile95Amount90Day,
             [FactKeys.AmountToP95Ratio] = amountToP95Ratio,
-            [FactKeys.OutboundTransfersLast10Min] = h.OutboundTransfersLast10Min,
-            [FactKeys.CumulativeOutflowToday] = h.CumulativeOutflowToday,
-            [FactKeys.OpeningBalanceToday] = h.OpeningBalanceToday,
+            [FactKeys.OutboundTransfersLast10Min] = history.OutboundTransfersLast10Min,
+            [FactKeys.CumulativeOutflowToday] = history.CumulativeOutflowToday,
+            [FactKeys.OpeningBalanceToday] = history.OpeningBalanceToday,
             [FactKeys.OutflowPercentOfBalance] = outflowPercent,
-            [FactKeys.InboundCreditsSimilarAmountLast24h] = h.InboundCreditsSimilarAmountLast24h,
-            [FactKeys.RoundNumberOutflowsLast24h] = h.RoundNumberOutflowsLast24h,
+            [FactKeys.InboundCreditsSimilarAmountLast24h] = history.InboundCreditsSimilarAmountLast24h,
+            [FactKeys.RoundNumberOutflowsLast24h] = history.RoundNumberOutflowsLast24h,
 
             [FactKeys.IsFirstTimeBeneficiary] = ctx.IsFirstTimeBeneficiary,
             [FactKeys.SuccessfulTransfersToBeneficiary] = ctx.SuccessfulTransfersToBeneficiary,
@@ -56,7 +56,7 @@ public static class FactBuilder
 
             [FactKeys.FailedOtpAttemptsLast15Min] = ctx.FailedOtpAttemptsLast15Min,
 
-            [FactKeys.IsWhitelisted] = lookups.IsWhitelisted || h.IsWhitelisted,
+            [FactKeys.IsWhitelisted] = lookups.IsWhitelisted || history.IsWhitelisted,
             [FactKeys.SenderOnInternalBlacklist] = lookups.SenderOnInternalBlacklist,
             [FactKeys.ReceiverOnNibssWatchlist] = lookups.ReceiverOnNibssWatchlist,
             [FactKeys.ReceiverNibssConfirmedFraud] = lookups.ReceiverNibssConfirmedFraud,

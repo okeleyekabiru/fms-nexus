@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Nexus.Fms.Api.Contracts;
 using Nexus.Fms.Core.Abstractions;
+using Nexus.Fms.Core.Dto;
 
 namespace Nexus.Fms.Api.Controllers;
 
