@@ -86,11 +86,13 @@ public sealed class ScreeningService : IScreeningService
         catch (Exception ex)
         {
             sw.Stop();
-            // FR-04: on a hard failure we have no triggered categories, so fall back to the
-            // global FailureMode. Per-category overrides (EffectiveModeFor) apply only when
-            // rules have been evaluated successfully and categories are known.
-            _logger.LogError(ex, "Screening failed for {Ref}; applying {Mode}", context.TransactionRef, _options.FailureMode);
-            var verdict = _options.FailureMode == FailureMode.FailClosed ? Verdict.Block : Verdict.Allow;
+            // FR-04: when screening fails entirely, apply fail-closed if any high-risk categories are
+            // configured — we cannot determine which would have fired, so we err on the safe side.
+            var effectiveMode = _options.FailClosedCategories.Count > 0
+                ? FailureMode.FailClosed
+                : _options.FailureMode;
+            _logger.LogError(ex, "Screening failed for {Ref}; applying {Mode}", context.TransactionRef, effectiveMode);
+            var verdict = effectiveMode == FailureMode.FailClosed ? Verdict.Block : Verdict.Allow;
             return new ScreeningResponse
             {
                 TransactionRef = context.TransactionRef,
@@ -166,11 +168,7 @@ public sealed class ScreeningService : IScreeningService
                 SenderBvn = context.SenderBvn,
                 Amount = context.Amount,
                 TriggeredRulesJson = JsonSerializer.Serialize(
-                    result.EffectiveRules.Select(r => new
-                    {
-                        r.Code, r.Name, r.Score, r.CannotBeOffset,
-                        Category = r.Category.ToString()
-                    })),
+                    result.EffectiveRules.Select(r => new { r.Code, r.Name, r.Score, Category = r.Category.ToString() })),
                 NibssLookupResultJson = needsNibss
                     ? JsonSerializer.Serialize(new { receiver = receiverNibss, sender = senderNibss })
                     : null
@@ -187,3 +185,30 @@ public sealed class ScreeningService : IScreeningService
             // FR-03: enqueue async evaluation if any active async rules exist.
             if (hasAsyncRules)
             {
+                try { await _asyncQueue.EnqueueAsync(alert.AlertId, context, ct); }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to enqueue async evaluation for {Ref}", context.TransactionRef);
+                }
+            }
+        }
+
+        sw.Stop();
+        if (sw.ElapsedMilliseconds > 50)
+            _logger.LogWarning("Screening for {Ref} took {Ms}ms (NFR-01 budget 50ms)", context.TransactionRef, sw.ElapsedMilliseconds);
+
+        return new ScreeningResponse
+        {
+            TransactionRef = context.TransactionRef,
+            Verdict = result.Verdict,
+            RiskScore = result.CompositeScore,
+            RiskLevel = result.RiskLevel,
+            TriggeredRules = result.EffectiveRules
+                .Select(r => new TriggeredRuleDto(r.Code, r.Name, r.Score, r.Category.ToString()))
+                .ToList(),
+            AlertId = alertId,
+            CaseId = caseId,
+            EvaluationMs = sw.ElapsedMilliseconds
+        };
+    }
+}

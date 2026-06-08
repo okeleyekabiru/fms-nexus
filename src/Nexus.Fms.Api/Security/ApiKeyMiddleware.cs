@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-
 namespace Nexus.Fms.Api.Security;
 
 /// <summary>
@@ -28,11 +25,21 @@ public sealed class ApiKeyMiddleware
             // If no key is configured (e.g. dev), allow all requests through.
             if (!string.IsNullOrWhiteSpace(configuredKey))
             {
-                // Timing-safe comparison to prevent timing attacks against the key.
-                var providedBytes   = context.Request.Headers.TryGetValue(HeaderName, out var provided)
-                    ? Encoding.UTF8.GetBytes(provided.ToString())
-                    : Array.Empty<byte>();
-                var configuredBytes = Encoding.UTF8.GetBytes(configuredKey);
-                if (!CryptographicOperations.FixedTimeEquals(providedBytes, configuredBytes))
+                if (!context.Request.Headers.TryGetValue(HeaderName, out var provided) ||
+                    provided != configuredKey)
                 {
                     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    await context.Response.WriteAsync(
+                        "Missing or invalid API key. Provide X-Api-Key header.");
+                    return;
+                }
+            }
+
+            // Skip JWT auth for this path — it's already authenticated via API key.
+            await _next(context);
+            return;
+        }
+
+        await _next(context);
+    }
+}
