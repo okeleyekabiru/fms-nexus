@@ -59,7 +59,7 @@ builder.Services.AddSwaggerGen(c =>
                             {
                                 Description = "JWT Bearer token. Enter: Bearer {token}",
                             },
-                            Array.Empty<string>()
+                            new List<string>()
                         }
     });
 });
@@ -101,32 +101,4 @@ builder.Services.AddSingleton<RuleEngine>();
 builder.Services.AddScoped<ScoringEngine>();
 builder.Services.AddScoped<IScreeningService, ScreeningService>();
 
-// ── Infrastructure (DB, NIBSS, repositories, jobs) ───────────────────────────
-builder.Services.AddFmsInfrastructure(builder.Configuration);
-
-// ── Build ──────────────────────────────────────────────────────────────────────
-var app = builder.Build();
-
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<FmsDbContext>();
-    await db.Database.EnsureCreatedAsync();
-    var seedMode = builder.Configuration.GetValue("Seeding:Mode", RuleMode.Shadow);
-    await RuleSeeder.SeedAsync(db, seedMode);
-    await ListSeeder.SeedAsync(db);
-}
-
-app.UseHttpsRedirection();
-
-// API-key guard for the machine-to-machine screening endpoint (M6-1).
-app.UseMiddleware<ApiKeyMiddleware>();
-
-app.UseAuthentication();
-app.UseAuthorization();
-
-app.MapControllers();
-app.Run();
+// ── Infrastructure (DB, NIBSS, repositories, jobs) ────────────────�

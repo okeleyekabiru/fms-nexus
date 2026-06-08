@@ -36,17 +36,3 @@ public sealed class ApiKeyMiddleware
                 if (!CryptographicOperations.FixedTimeEquals(providedBytes, configuredBytes))
                 {
                     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    await context.Response.WriteAsync(
-                        "Missing or invalid API key. Provide X-Api-Key header.");
-                    return;
-                }
-            }
-
-            // Skip JWT auth for this path — it's already authenticated via API key.
-            await _next(context);
-            return;
-        }
-
-        await _next(context);
-    }
-}

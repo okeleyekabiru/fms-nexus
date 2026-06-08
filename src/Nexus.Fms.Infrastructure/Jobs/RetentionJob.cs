@@ -65,17 +65,4 @@ public sealed class RetentionJob : BackgroundService
         var deletedLiveAlerts = await db.Alerts
             .Where(a => a.CreatedAt < cutoff
                         && !a.ShadowOnly
-                        && !db.Cases.Any(c => c.AlertId == a.AlertId
-                                              && c.Status != CaseStatus.Resolved))
-            .ExecuteDeleteAsync(ct);
-
-        // Purge completed/failed async evaluation records older than retention.
-        var deletedAsync = await db.AsyncEvaluations
-            .Where(e => e.ProcessedAt != null && e.ProcessedAt < cutoff)
-            .ExecuteDeleteAsync(ct);
-
-        _logger.LogInformation(
-            "RetentionJob: deleted {Shadow} shadow alerts, {Live} live alerts, {Async} async eval records",
-            deletedShadowAlerts, deletedLiveAlerts, deletedAsync);
-    }
-}
+                        && !

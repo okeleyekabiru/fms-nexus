@@ -110,5 +110,4 @@ CREATE TABLE IF NOT EXISTS fraud_audit_logs (
 );
 
 CREATE INDEX IF NOT EXISTS ix_fraud_audit_logs_entity_type ON fraud_audit_logs (entity_type);
-CREATE INDEX IF NOT EXISTS ix_fraud_audit_logs_entity_id   ON fraud_audit_logs (entity_id);
-CREATE INDEX IF NOT EXISTS ix_fraud_audit_logs_timestamp   ON fraud_audit_logs (timestamp);
+CREATE INDEX IF NOT EXISTS ix_frau
