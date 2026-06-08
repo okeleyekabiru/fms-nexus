@@ -15,11 +15,27 @@ public sealed class ScreeningOptions
     /// <summary>Default fail behaviour when screening errors/times out (FR-04, NFR-04).</summary>
     public FailureMode FailureMode { get; set; } = FailureMode.FailOpen;
 
+    /// <summary>
+    /// Per-category overrides for fail-closed behaviour (FR-04).
+    /// Categories listed here always fail-closed regardless of <see cref="FailureMode"/>.
+    /// Example: ["Blacklist", "Watchlist"]
+    /// </summary>
+    public List<RuleCategory> FailClosedCategories { get; set; } = new();
+
     /// <summary>Score added when NIBSS is unreachable (FR-16, R15). Default +5.</summary>
     public int NibssUnavailableCompensatingScore { get; set; } = 5;
 
     /// <summary>Risk-level threshold (inclusive) at and above which a case is opened (FR-18). Default P3.</summary>
     public RiskLevel CaseCreationLevel { get; set; } = RiskLevel.P3;
+
+    /// <summary>
+    /// Returns the effective FailureMode for a set of triggered rule categories (FR-04).
+    /// If any triggered category is in <see cref="FailClosedCategories"/>, returns FailClosed.
+    /// </summary>
+    public FailureMode EffectiveModeFor(IEnumerable<RuleCategory> triggeredCategories) =>
+        triggeredCategories.Any(c => FailClosedCategories.Contains(c))
+            ? FailureMode.FailClosed
+            : FailureMode;
 }
 
 /// <summary>
@@ -70,9 +86,13 @@ public sealed class ScreeningService : IScreeningService
         catch (Exception ex)
         {
             sw.Stop();
-            _logger.LogError(ex, "Screening failed for {Ref}; applying {Mode}", context.TransactionRef, _options.FailureMode);
-            // FR-04: fail-open (allow, log bypass) or fail-closed (block) for high-risk categories.
-            var verdict = _options.FailureMode == FailureMode.FailClosed ? Verdict.Block : Verdict.Allow;
+            // FR-04: when screening fails entirely, apply fail-closed if any high-risk categories are
+            // configured — we cannot determine which would have fired, so we err on the safe side.
+            var effectiveMode = _options.FailClosedCategories.Count > 0
+                ? FailureMode.FailClosed
+                : _options.FailureMode;
+            _logger.LogError(ex, "Screening failed for {Ref}; applying {Mode}", context.TransactionRef, effectiveMode);
+            var verdict = effectiveMode == FailureMode.FailClosed ? Verdict.Block : Verdict.Allow;
             return new ScreeningResponse
             {
                 TransactionRef = context.TransactionRef,
@@ -165,30 +185,4 @@ public sealed class ScreeningService : IScreeningService
             // FR-03: enqueue async evaluation if any active async rules exist.
             if (hasAsyncRules)
             {
-                try { await _asyncQueue.EnqueueAsync(alert.AlertId, context, ct); }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to enqueue async evaluation for {Ref}", context.TransactionRef);
-                }
-            }
-        }
-
-        sw.Stop();
-        if (sw.ElapsedMilliseconds > 50)
-            _logger.LogWarning("Screening for {Ref} took {Ms}ms (NFR-01 budget 50ms)", context.TransactionRef, sw.ElapsedMilliseconds);
-
-        return new ScreeningResponse
-        {
-            TransactionRef = context.TransactionRef,
-            Verdict = result.Verdict,
-            RiskScore = result.CompositeScore,
-            RiskLevel = result.RiskLevel,
-            TriggeredRules = result.EffectiveRules
-                .Select(r => new TriggeredRuleDto(r.Code, r.Name, r.Score, r.Category.ToString()))
-                .ToList(),
-            AlertId = alertId,
-            CaseId = caseId,
-            EvaluationMs = sw.ElapsedMilliseconds
-        };
-    }
-}
+                try { await _a
