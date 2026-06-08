@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Nexus.Fms.Core.Domain;
 using Nexus.Fms.Infrastructure.Persistence;
 
 namespace Nexus.Fms.Infrastructure.Jobs;
@@ -55,17 +56,26 @@ public sealed class RetentionJob : BackgroundService
         var db = scope.ServiceProvider.GetRequiredService<FmsDbContext>();
 
         // Purge shadow-only alerts with no associated case (low-risk noise).
-        var deletedAlerts = await db.Alerts
+        var deletedShadowAlerts = await db.Alerts
             .Where(a => a.CreatedAt < cutoff && a.ShadowOnly)
             .ExecuteDeleteAsync(ct);
 
-        // Purge completed async evaluation records.
+        // Purge non-shadow alerts older than retention with no open case.
+        // Resolved/closed cases are fine to purge; open cases retain their parent alert.
+        var deletedLiveAlerts = await db.Alerts
+            .Where(a => a.CreatedAt < cutoff
+                        && !a.ShadowOnly
+                        && !db.Cases.Any(c => c.AlertId == a.AlertId
+                                              && c.Status != CaseStatus.Resolved))
+            .ExecuteDeleteAsync(ct);
+
+        // Purge completed/failed async evaluation records older than retention.
         var deletedAsync = await db.AsyncEvaluations
-            .Where(e => e.ProcessedAt < cutoff)
+            .Where(e => e.ProcessedAt != null && e.ProcessedAt < cutoff)
             .ExecuteDeleteAsync(ct);
 
         _logger.LogInformation(
-            "RetentionJob: deleted {Alerts} shadow alerts, {Async} async eval records",
-            deletedAlerts, deletedAsync);
+            "RetentionJob: deleted {Shadow} shadow alerts, {Live} live alerts, {Async} async eval records",
+            deletedShadowAlerts, deletedLiveAlerts, deletedAsync);
     }
 }
