@@ -51,16 +51,13 @@ builder.Services.AddSwaggerGen(c =>
 
     // Use OpenApiSecuritySchemeReference (existing in provided signatures) instead of
     // trying to use a non-existent OpenApiReference / Reference property.
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    // Swashbuckle 10.x requires a Func<OpenApiDocument, OpenApiSecurityRequirement> overload.
+    c.AddSecurityRequirement(_ => new OpenApiSecurityRequirement
     {
-                        {
-                            // Provide required constructor args: referenceId = "Bearer", document = null, referenceType = null
-                            new OpenApiSecuritySchemeReference("Bearer", null, null)
-                            {
-                                Description = "JWT Bearer token. Enter: Bearer {token}",
-                            },
-                            new List<string>()
-                        }
+        {
+            new OpenApiSecuritySchemeReference("Bearer"),
+            new List<string>()
+        }
     });
 });
 
@@ -101,4 +98,7 @@ builder.Services.AddSingleton<RuleEngine>();
 builder.Services.AddScoped<ScoringEngine>();
 builder.Services.AddScoped<IScreeningService, ScreeningService>();
 
-// ── Infrastructure (DB, NIBSS, repositories, jobs) ────────────────�
+// ── Infrastructure (DB, NIBSS, repositories, jobs) ───────────────────────────
+builder.Services.AddFmsInfrastructure(builder.Configuration);
+
+// ── Build ───────────────────────────────────────────────�
