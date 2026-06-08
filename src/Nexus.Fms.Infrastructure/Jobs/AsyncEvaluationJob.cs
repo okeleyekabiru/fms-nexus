@@ -16,7 +16,8 @@ namespace Nexus.Fms.Infrastructure.Jobs;
 /// Runs every 30 seconds. For each pending item:
 ///   1. Deserialise the saved TransactionContext.
 ///   2. Re-evaluate only async (IsSynchronous = false) rules.
-///   3. Merge triggered async rules into the existing alert (update score + risk level + verdict).
+///   3. Reconstruct all triggered rules (sync from stored JSON + new async) and re-score
+///      the full combined set so that CannotBeOffset semantics are preserved.
 ///   4. If the updated risk level now warrants a case and none exists, create one.
 ///   5. Mark the queue item completed or failed.
 /// </summary>
@@ -28,6 +29,15 @@ public sealed class AsyncEvaluationJob : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<AsyncEvaluationJob> _logger;
 
+    // Private DTO for deserialising the triggered-rules JSON stored on FraudAlert.
+    // CannotBeOffset defaults to false to handle records written before it was added.
+    private sealed record StoredTriggeredRule(
+        string Code,
+        string Name,
+        int Score,
+        string Category,
+        bool CannotBeOffset = false);
+
     public AsyncEvaluationJob(IServiceScopeFactory scopeFactory, ILogger<AsyncEvaluationJob> logger)
     {
         _scopeFactory = scopeFactory;
@@ -36,12 +46,14 @@ public sealed class AsyncEvaluationJob : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Run first iteration immediately, then wait between runs.
         while (!stoppingToken.IsCancellationRequested)
         {
-            await Task.Delay(Interval, stoppingToken);
             try { await RunAsync(stoppingToken); }
             catch (OperationCanceledException) { break; }
             catch (Exception ex) { _logger.LogError(ex, "AsyncEvaluationJob failed"); }
+
+            await Task.Delay(Interval, stoppingToken);
         }
     }
 
@@ -59,7 +71,8 @@ public sealed class AsyncEvaluationJob : BackgroundService
         if (batch.Count == 0) return;
 
         var activeRules = await rules.GetActiveRulesAsync(ct);
-        var asyncRules  = activeRules.Where(r => r.IsActive && !r.IsSynchronous).ToList();
+        // GetActiveRulesAsync already filters to Live/Shadow — no need for r.IsActive check.
+        var asyncRules = activeRules.Where(r => !r.IsSynchronous).ToList();
         if (asyncRules.Count == 0)
         {
             // No async rules configured — complete all pending items.
@@ -67,6 +80,9 @@ public sealed class AsyncEvaluationJob : BackgroundService
                 await queue.MarkCompletedAsync(item.Id, ct);
             return;
         }
+
+        // Build a lookup so we can recover CannotBeOffset for stored sync rules.
+        var ruleByCode = activeRules.ToDictionary(r => r.Code, StringComparer.OrdinalIgnoreCase);
 
         foreach (var item in batch)
         {
@@ -76,9 +92,8 @@ public sealed class AsyncEvaluationJob : BackgroundService
                     item.TransactionContextJson, JsonOpts);
                 if (context is null) throw new InvalidOperationException("Null TransactionContext after deserialise");
 
-                // Re-use an empty lookups result for async rules (no DB/NIBSS calls here
-                // to stay within a reasonable latency — async rules should only need facts
-                // derived from the TransactionContext itself).
+                // Re-use an empty lookups result for async rules (no DB/NIBSS calls here —
+                // async rules should only need facts from the TransactionContext itself).
                 var facts = Core.Engine.FactBuilder.Build(context, new ListLookupResult());
 
                 var asyncTriggered = engine.Evaluate(asyncRules, facts, synchronousOnly: false);
@@ -88,7 +103,7 @@ public sealed class AsyncEvaluationJob : BackgroundService
                     continue;
                 }
 
-                // Fetch existing alert and merge.
+                // Fetch existing alert.
                 var alert = await alerts.GetAlertByIdAsync(item.AlertId, ct);
                 if (alert is null)
                 {
@@ -97,39 +112,43 @@ public sealed class AsyncEvaluationJob : BackgroundService
                     continue;
                 }
 
-                // Deserialise existing triggered rules and append async ones.
-                var existingRules = JsonSerializer.Deserialize<List<JsonElement>>(
+                // Reconstruct sync TriggeredRule objects from the stored JSON so that
+                // CannotBeOffset semantics are preserved when re-scoring the full set.
+                var storedDtos = JsonSerializer.Deserialize<List<StoredTriggeredRule>>(
                     alert.TriggeredRulesJson, JsonOpts) ?? new();
-                var asyncElements = asyncTriggered
-                    .Select(r => JsonSerializer.SerializeToElement(
-                        new { r.Code, r.Name, r.Score, Category = r.Category.ToString() }));
-                var merged = JsonSerializer.Serialize(existingRules.Concat(asyncElements));
 
-                // Re-score with all rules (existing sync + new async).
-                var allTriggered = asyncTriggered; // combined scoring uses composite method
-                var newResult = scoring.Score(allTriggered);
-
-                // Only escalate score if the async rules add risk.
-                var updatedScore   = alert.CompositeRiskScore + newResult.CompositeScore;
-                var updatedLevel   = bands.Classify(updatedScore);
-                var updatedVerdict = updatedLevel switch
+                var syncTriggered = storedDtos.Select(dto => new TriggeredRule
                 {
-                    RiskLevel.P1 => Verdict.Block,
-                    RiskLevel.P2 => Verdict.RequireMfa,
-                    RiskLevel.P3 => Verdict.Flag,
-                    _            => Verdict.Allow
-                };
+                    RuleId         = ruleByCode.TryGetValue(dto.Code, out var r) ? r.RuleId : Guid.Empty,
+                    Code           = dto.Code,
+                    Name           = dto.Name,
+                    Score          = dto.Score,
+                    Category       = Enum.TryParse<RuleCategory>(dto.Category, out var cat) ? cat : default,
+                    CannotBeOffset = dto.CannotBeOffset,
+                    ShadowOnly     = false
+                }).ToList();
 
-                alert.TriggeredRulesJson  = merged;
-                alert.CompositeRiskScore  = updatedScore;
-                alert.RiskLevel           = updatedLevel;
-                alert.Verdict             = updatedVerdict;
+                // Re-score the full combined set — this correctly applies CannotBeOffset
+                // across both sync and async rules instead of simple arithmetic addition.
+                var allTriggered = syncTriggered.Concat(asyncTriggered).ToList();
+                var newResult    = scoring.Score(allTriggered);
+
+                // Persist the merged JSON and updated scores.
+                alert.TriggeredRulesJson = JsonSerializer.Serialize(
+                    allTriggered.Select(r => new
+                    {
+                        r.Code, r.Name, r.Score, r.CannotBeOffset,
+                        Category = r.Category.ToString()
+                    }));
+                alert.CompositeRiskScore = newResult.CompositeScore;
+                alert.RiskLevel         = newResult.RiskLevel;
+                alert.Verdict           = newResult.Verdict;
 
                 await alerts.UpdateAlertAsync(alert, ct);
 
                 _logger.LogInformation(
-                    "AsyncEvaluationJob: alert {AlertId} updated — new score {Score}, level {Level}",
-                    alert.AlertId, updatedScore, updatedLevel);
+                    "AsyncEvaluationJob: alert {AlertId} updated — score {Score}, level {Level}",
+                    alert.AlertId, newResult.CompositeScore, newResult.RiskLevel);
 
                 await queue.MarkCompletedAsync(item.Id, ct);
             }

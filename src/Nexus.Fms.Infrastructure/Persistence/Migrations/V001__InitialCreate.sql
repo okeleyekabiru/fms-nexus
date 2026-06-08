@@ -64,6 +64,10 @@ CREATE TABLE IF NOT EXISTS fraud_cases (
 CREATE INDEX IF NOT EXISTS ix_fraud_cases_alert_id ON fraud_cases (alert_id);
 CREATE INDEX IF NOT EXISTS ix_fraud_cases_status   ON fraud_cases (status);
 
+ALTER TABLE fraud_cases
+    ADD CONSTRAINT fk_fraud_cases_alert_id
+    FOREIGN KEY (alert_id) REFERENCES fraud_alerts (alert_id) ON DELETE RESTRICT;
+
 -- ---- fraud_list_entries ---------------------------------
 CREATE TABLE IF NOT EXISTS fraud_list_entries (
     entry_id       UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -106,5 +110,4 @@ CREATE TABLE IF NOT EXISTS fraud_audit_logs (
 );
 
 CREATE INDEX IF NOT EXISTS ix_fraud_audit_logs_entity_type ON fraud_audit_logs (entity_type);
-CREATE INDEX IF NOT EXISTS ix_fraud_audit_logs_entity_id   ON fraud_audit_logs (entity_id);
-CREATE INDEX IF NOT EXISTS ix_fraud_audit_logs_timestamp   ON fraud_audit_logs (timestamp);
+CREATE INDEX IF NOT EXISTS ix_frau
